@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: autoprinter
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 1 --threads 4 -b 0.0.0.0:$PORT run:app
+    disk:
+      name: autoprinter-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /opt/render/project/src/data
+      - key: ENABLE_IN_PROCESS_PRINTER
+        value: "0"
+      - key: ENABLE_CLEANUP_THREAD
+        value: "1"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: WORKER_API_TOKEN
+        generateValue: true
+      - key: PUBLIC_BASE_URL
+        sync: false

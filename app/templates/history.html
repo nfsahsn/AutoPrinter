@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="cardx">
+    <div class="d-flex items-center justify-between mb-4">
+        <h2 style="font-size:20px; font-weight:800;">Print History</h2>
+        <div class="badge badge--printed">{{ orders|length }} Records</div>
+    </div>
+    
+    <div class="softLine"></div>
+
+    <!-- Print History -->
+    <div id="content-orders">
+        {% for o in orders %}
+        <div class="mb-3 p-4 d-flex justify-between items-center" style="background: var(--bg-card-hover); border: 1px solid var(--border); border-radius: var(--radius-lg); transition: all 0.3s ease;">
+            <div>
+                <div style="font-size: 15px; font-weight: 800; color: var(--text-primary); margin-bottom: 4px;">
+                    Order #{{ o.order_id|upper }}
+                </div>
+                <div class="text-muted" style="font-size: 13px; font-weight: 500;">
+                    {{ o.pages }} pages • ৳{{ o.total }}
+                </div>
+                <div class="text-muted mt-1" style="font-size: 11px;">
+                    {{ o.time }}
+                </div>
+            </div>
+            <div class="d-flex flex-col items-end gap-2">
+                {% if o.status == 'PAYMENT_PENDING' %}
+                    <span class="badge badge--pending">Payment Pending</span>
+                {% elif o.status == 'WAITING_QUEUE' %}
+                    <span class="badge badge--queued">Waiting Queue</span>
+                {% elif o.status == 'QUEUED' %}
+                    <span class="badge badge--queued">Queued</span>
+                {% elif o.status == 'PRINTING' %}
+                    <span class="badge badge--printing">Printing</span>
+                {% elif o.status == 'PRINTED' %}
+                    <span class="badge badge--printed">Printed</span>
+                {% else %}
+                    <span class="badge badge--failed">{{ o.status }}</span>
+                {% endif %}
+                <a href="/status/{{ o.order_id }}" class="btn btn-sm btn-outline mt-2" style="font-size: 11px; padding: 6px 12px;">Track Status</a>
+            </div>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <div style="font-size: 40px; margin-bottom: 16px; opacity: 0.5;">🖨️</div>
+            <p class="text-muted" style="font-size: 14px; font-weight: 600;">No print history yet</p>
+            <a href="/print" class="btn btn-primary mt-3">Print a Document</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

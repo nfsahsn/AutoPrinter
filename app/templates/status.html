@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% block extra_css %}
+.countdown { font-family: 'JetBrains Mono', monospace; font-size: 32px; font-weight: 700; color: var(--text-primary); }
+.status-section { background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; text-align: center; }
+{% endblock %}
+
+{% block content %}
+<div class="cardx text-center">
+    <div class="d-flex items-center justify-between">
+        <h2 style="font-size:18px; font-weight:800;">Print Status</h2>
+        <span style="font-size:11px; font-weight:700; color:var(--status-success); text-transform:uppercase; letter-spacing:1px;">
+            <span class="pulse-dot"></span> Live
+        </span>
+    </div>
+
+    <div class="softLine"></div>
+
+    <div class="grid grid-2" style="text-align:left;">
+        <div class="metric"><div class="k">Token</div><div class="v">#{{ order.queue_no }}</div></div>
+        <div class="metric"><div class="k">Status</div><div class="v" id="st" style="font-size:14px;">{{ order.status }}</div></div>
+    </div>
+
+    <div class="softLine"></div>
+
+    <div class="status-section">
+        <div style="font-size:15px; font-weight:700;" id="msg">Loading...</div>
+        <div class="text-muted mt-2" id="jobsBefore" style="font-size:13px; font-weight:600;"></div>
+        <div class="countdown mt-3" id="timer"></div>
+
+        <div id="progressBox" style="display:none; margin-top:16px;">
+            <div class="pwrap"><div class="pbar" id="pbar"></div></div>
+            <div class="text-muted mt-2" style="font-size:12px;" id="ptext"></div>
+        </div>
+    </div>
+
+    <div class="grid grid-1 mt-4">
+        <a class="btn btn-primary w-full" href="/print">New Print</a>
+        <a class="btn btn-dark w-full" href="/history">View History</a>
+    </div>
+</div>
+
+<script>
+function formatTime(sec) {
+    sec = Math.max(0, sec);
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return (m > 0 ? m + "m " : "") + s + "s";
+}
+
+function getStatusBadge(status) {
+    var map = {
+        "PAYMENT_PENDING": ["pending", "💳", "Payment Pending"],
+        "WAITING_PAYMENT": ["pending", "💳", "Payment Pending"],
+        "PAYMENT_LINK_CREATED": ["pending", "💳", "Payment Link Created"],
+        "WAITING_QUEUE": ["queued", "⏳", "Waiting Queue"],
+        "QUEUED": ["queued", "⏳", "Queued"],
+        "PRINTING": ["printing", "🖨", "Printing"],
+        "PRINTED": ["printed", "✅", "Printed"],
+        "PRINT_FAILED": ["failed", "❌", "Print Failed"]
+    };
+    var info = map[status] || ["queued", "", status];
+    return '<span class="badge badge--' + info[0] + '">' + info[1] + ' ' + info[2] + '</span>';
+}
+
+async function refreshStatus() {
+    try {
+        var r = await fetch("/status-data/{{ order.order_id }}");
+        var d = await r.json();
+        if (!d.ok) return;
+
+        document.getElementById("st").innerHTML = getStatusBadge(d.status);
+
+        if (d.status === "PAYMENT_PENDING" || d.status === "WAITING_PAYMENT" || d.status === "PAYMENT_LINK_CREATED") {
+            document.getElementById("msg").innerText = "💳 Waiting for payment...";
+            document.getElementById("timer").innerText = "";
+            document.getElementById("jobsBefore").innerText = "";
+            document.getElementById("progressBox").style.display = "none";
+        }
+        else if (d.status === "WAITING_QUEUE") {
+            document.getElementById("msg").innerText = "⏳ Queue is full. You will be processed automatically soon.";
+            var waitingPagesAhead = d.pages_before ?? d.jobs_before;
+            
+            if (waitingPagesAhead !== null && waitingPagesAhead !== undefined) {
+                document.getElementById("jobsBefore").innerText =
+                    "📌 " + waitingPagesAhead + " pages ahead (paid FIFO)";
+            }
+            if (d.remaining !== null && d.remaining !== undefined) {
+                document.getElementById("timer").innerText = formatTime(d.remaining);
+            } else {
+                document.getElementById("timer").innerText = "";
+            }
+            document.getElementById("progressBox").style.display = "none";
+        }
+        else if (d.status === "QUEUED" || d.status === "PRINTING") {
+            document.getElementById("msg").innerText = d.status === "PRINTING" ? "🖨️ Printing your job..." : "⏳ In Queue...";
+            var pagesAhead = d.pages_before ?? d.jobs_before;
+            
+            if (pagesAhead !== null && pagesAhead !== undefined) {
+                document.getElementById("jobsBefore").innerText =
+                    "📌 " + pagesAhead + " pages ahead (paid FIFO)";
+            }
+            if (d.remaining !== null && d.remaining !== undefined) {
+                document.getElementById("timer").innerText = formatTime(d.remaining);
+            } else {
+                document.getElementById("timer").innerText = "";
+            }
+
+            if (d.status === "PRINTING") {
+                document.getElementById("progressBox").style.display = "block";
+                var pct = d.progress || 0;
+                document.getElementById("pbar").style.width = pct + "%";
+                document.getElementById("ptext").innerText = pct + "% complete";
+            } else {
+                document.getElementById("progressBox").style.display = "none";
+            }
+        }
+        else {
+            document.getElementById("msg").innerText =
+                d.status === "PRINTED" ? "✅ Printed Successfully!" : "❌ Print Failed. Contact Admin.";
+            document.getElementById("timer").innerText = "";
+            document.getElementById("jobsBefore").innerText = "";
+            document.getElementById("progressBox").style.display = "none";
+        }
+    } catch(e) {}
+}
+
+setInterval(refreshStatus, 1500);
+refreshStatus();
+</script>
+{% endblock %}

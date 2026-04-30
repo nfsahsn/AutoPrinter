@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block extra_css %}
+.token-number { font-family: 'JetBrains Mono', monospace; font-size: 72px; font-weight: 900; letter-spacing: -2px; background: var(--accent-gradient-h); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; line-height: 1; animation: scaleIn 0.5s both; }
+.qr-container { display: inline-block; padding: 12px; background: #fff; border-radius: var(--radius-lg); box-shadow: 0 8px 32px rgba(0,0,0,0.3); animation: fadeUp 0.5s 0.2s both; }
+.qr-container img { display: block; width: 180px; height: 180px; border-radius: var(--radius-sm); }
+{% endblock %}
+
+{% block content %}
+<div class="cardx text-center">
+    <div>
+        <p class="text-muted" style="font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">Token Number</p>
+        <div class="token-number">#{{ order.queue_no }}</div>
+    </div>
+
+    <div class="softLine"></div>
+
+    <div class="grid grid-2" style="text-align:left;">
+        <div class="metric"><div class="k">Pages</div><div class="v">{{ order.pages }} × {{ order.copies }}</div></div>
+        <div class="metric"><div class="k">Cost</div><div class="v text-success">৳{{ order.total }}</div></div>
+    </div>
+
+    <div class="mt-3 p-3" style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: var(--radius-md); text-align: center;">
+        <div style="font-size: 14px; font-weight: 700; color: #fbbf24; margin-bottom: 4px;">⏳ Payment Pending</div>
+        <div class="text-muted" style="font-size: 12px; line-height: 1.4;">Your document will enter the print queue automatically once payment is verified.</div>
+    </div>
+
+    <div class="softLine"></div>
+
+    <div class="grid grid-2" style="text-align:left;">
+        <div class="metric"><div class="k">Queue</div><div class="v">{{ paid_pages }} pg</div></div>
+        <div class="metric"><div class="k">Est. Wait</div><div class="v">{{ estimated_total }}s</div></div>
+    </div>
+
+    <div class="softLine"></div>
+
+    <p class="text-muted" style="font-size:13px; margin-bottom:12px;">Scan to check status</p>
+    <div class="qr-container">
+        <img src="{{ qr_img }}">
+    </div>
+
+    <div class="grid grid-1 mt-4">
+        <a class="btn btn-primary w-full" href="/status/{{ order.order_id }}">Track Status</a>
+        <a class="btn btn-ghost w-full" href="/print" style="font-size:13px;">New Print</a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block extra_css %}
+.login-icon {
+    width: 56px;
+    height: 56px;
+    background: var(--accent-gradient);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    font-size: 24px;
+    box-shadow: 0 8px 24px rgba(59,130,246,0.2);
+    animation: scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.login-title {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+.login-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+}
+.pw-wrap { position: relative; }
+.pw-wrap .form-control { padding-right: 48px; }
+.pw-toggle {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    font-size: 18px;
+}
+{% endblock %}
+
+{% block content %}
+<div class="cardx text-center">
+    <div class="login-icon">🔐</div>
+    <h2 class="login-title">Admin Login</h2>
+    <p class="login-sub">Enter your admin password</p>
+    {% if error %}
+    <div class="alert-error">❌ {{ error }}</div>
+    {% endif %}
+    <form method="post" style="text-align:left;">
+        <div class="form-group">
+            <label class="form-label">Password</label>
+            <div class="pw-wrap">
+                <input class="form-control" type="password" name="password" id="lp" required placeholder="Enter password" autocomplete="current-password">
+                <button type="button" class="pw-toggle" onclick="var e=document.getElementById('lp');e.type=e.type==='password'?'text':'password'">👁</button>
+            </div>
+        </div>
+        <button class="btn btn-primary w-full mt-3" type="submit">Log In →</button>
+    </form>
+    <a class="btn btn-ghost w-full mt-2" href="/print" style="font-size:13px;">← Back to Upload</a>
+</div>
+{% endblock %}

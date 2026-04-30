@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block extra_css %}
+.upload-hero { margin-bottom: 8px; }
+.upload-hero__title { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 4px; }
+.upload-hero__sub { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+
+.dropzone { position: relative; border: 2px dashed var(--border-hover); border-radius: var(--radius-lg); padding: 32px 20px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: rgba(255,255,255,0.015); margin-bottom: 20px; }
+.dropzone:hover, .dropzone.drag-over { border-color: var(--accent-blue); background: rgba(59,130,246,0.04); }
+.dropzone__icon { font-size: 36px; margin-bottom: 10px; display: block; opacity: 0.7; }
+.dropzone__text { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
+.dropzone__hint { font-size: 12px; color: var(--text-muted); }
+.dropzone__input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.dropzone__filename { display: none; margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--status-success); word-break: break-all; }
+.dropzone__filename.show { display: block; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+{% endblock %}
+
+{% block content %}
+<div class="cardx">
+    <div class="upload-hero">
+        <h2 class="upload-hero__title">Upload PDF</h2>
+        <p class="upload-hero__sub">PDF files only · A4 paper size</p>
+    </div>
+
+    <div class="softLine"></div>
+
+    <form action="/upload" method="post" enctype="multipart/form-data" id="uploadForm">
+        <div class="dropzone" id="dropzone">
+            <input class="dropzone__input" type="file" name="file" accept="application/pdf" required id="fileInput">
+            <span class="dropzone__icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-secondary); display:inline;">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="12" y1="18" x2="12" y2="12"/>
+                    <line x1="9" y1="15" x2="12" y2="12"/>
+                    <line x1="15" y1="15" x2="12" y2="12"/>
+                </svg>
+            </span>
+            <div class="dropzone__text">Tap to select PDF</div>
+            <div class="dropzone__hint">or drag and drop here</div>
+            <div class="dropzone__filename" id="fileName"></div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Copies</label>
+                <input class="form-control" type="number" name="copies" min="1" value="1" required inputmode="numeric">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Print Type</label>
+                <select class="form-select" name="ptype">
+                    <option value="bw">Black & White</option>
+                    <option value="color">Color</option>
+                </select>
+            </div>
+        </div>
+
+        <button class="btn btn-primary w-full mt-3" type="submit" id="submitBtn">Continue →</button>
+    </form>
+</div>
+
+
+
+<script>
+(function() {
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+
+    fileInput.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+            fileName.textContent = '✓ ' + this.files[0].name;
+            fileName.classList.add('show');
+            dropzone.style.borderColor = 'var(--status-success)';
+            dropzone.style.background = 'rgba(16,185,129,0.04)';
+        }
+    });
+
+    ['dragenter', 'dragover'].forEach(e => {
+        dropzone.addEventListener(e, (ev) => { ev.preventDefault(); dropzone.classList.add('drag-over'); });
+    });
+    ['dragleave', 'drop'].forEach(e => {
+        dropzone.addEventListener(e, (ev) => { ev.preventDefault(); dropzone.classList.remove('drag-over'); });
+    });
+    dropzone.addEventListener('drop', (e) => {
+        fileInput.files = e.dataTransfer.files;
+        fileInput.dispatchEvent(new Event('change'));
+    });
+
+    document.getElementById('uploadForm').addEventListener('submit', function() {
+        const btn = document.getElementById('submitBtn');
+        btn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;"></span> Uploading...';
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+    });
+})();
+</script>
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+{% endblock %}

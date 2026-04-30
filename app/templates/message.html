@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="cardx {% if center %}text-center{% endif %}">
+    {% if headline %}
+    <h2 style="font-size:20px; font-weight:800; letter-spacing:-0.3px; margin-bottom:8px;" class="{% if headline_class %}{{ headline_class }}{% endif %}">{{ headline|safe }}</h2>
+    {% endif %}
+
+    {% if subtext %}
+    <p class="text-muted" style="font-size:14px; font-weight:500; margin-bottom:16px;">{{ subtext }}</p>
+    {% endif %}
+
+    {{ body_html|safe }}
+
+    {% if back_url %}
+    <a class="btn btn-dark w-full mt-3" href="{{ back_url }}">{{ back_text|default('← Back') }}</a>
+    {% endif %}
+</div>
+{% endblock %}

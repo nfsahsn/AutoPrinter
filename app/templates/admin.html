@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block extra_css %}
+.table-wrap { overflow-x: auto; margin: 0 -20px; padding: 0 20px; }
+.ap-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 600px; }
+.ap-table th { text-align: left; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 12px 10px; border-bottom: 1px solid var(--border); }
+.ap-table td { padding: 12px 10px; border-bottom: 1px solid var(--border); color: var(--text-secondary); vertical-align: middle; }
+.ap-table tr:hover td { background: rgba(255,255,255,0.02); }
+{% endblock %}
+
+{% block extra_head %}
+<meta http-equiv='refresh' content='{{ config["ADMIN_REFRESH_SECONDS"] }}'>
+{% endblock %}
+
+{% block content %}
+<div class="cardx">
+    <div class="d-flex justify-between items-center mb-3">
+        <h2 style="font-size:20px; font-weight:800;">🛠 Admin Panel</h2>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline btn-sm" href="/admin-change-password">Pass</a>
+            <a class="btn btn-danger-outline btn-sm" href="/admin-logout">Logout</a>
+        </div>
+    </div>
+
+
+
+    <div class="table-wrap">
+        <table class="ap-table">
+            <thead>
+                <tr>
+                    <th>Token</th><th>User</th><th>Total</th><th>Pages</th><th>Status</th><th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for o in orders %}
+                <tr>
+                    <td style="font-weight: 800; font-family: 'JetBrains Mono';">#{{ o.queue_no }}</td>
+                    <td style="font-size: 12px;">{{ o.phone }}</td>
+                    <td style="font-weight: 700;">৳{{ o.total }}</td>
+                    <td>{{ o.pages }}×{{ o.copies }}</td>
+                    <td>
+                        {% if o.status == 'WAITING_QUEUE' %}<span class="badge badge--queued">Waiting Queue</span>
+                        {% elif o.status == 'QUEUED' %}<span class="badge badge--queued">Queued</span>
+                        {% elif o.status == 'PRINTING' %}<span class="badge badge--printing">Printing</span>
+                        {% elif o.status == 'PRINTED' %}<span class="badge badge--printed">Printed</span>
+                        {% elif o.status == 'PAYMENT_PENDING' %}<span class="badge badge--pending">Pending</span>
+                        {% else %}<span class="badge badge--failed">Failed</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if o.status == 'PAYMENT_PENDING' %}
+                        <form action="/admin-mark-paid/{{ o.order_id }}" method="post" style="display:inline;">
+                            <button class="btn btn-success btn-sm" type="submit">Paid</button>
+                        </form>
+                        {% endif %}
+                        <a class="btn btn-outline btn-sm" href="/admin-reprint/{{ o.order_id }}">🔁</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan='6' class="text-center text-muted py-4">No orders yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
