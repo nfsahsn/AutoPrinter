@@ -8,21 +8,37 @@ from typing import Any, Dict, List, Optional, Tuple
 from flask import current_app
 
 
-def load_orders() -> List[Dict[str, Any]]:
-    db_file = current_app.config["DB_FILE"]
-    if not os.path.exists(db_file):
-        return []
-    try:
-        with open(db_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+from app.extensions import db
+from app.models import Order
 
+def load_orders() -> List[Dict[str, Any]]:
+    with current_app.app_context():
+        return [o.to_dict() for o in Order.query.all()]
 
 def save_orders(orders: List[Dict[str, Any]]) -> None:
-    db_file = current_app.config["DB_FILE"]
-    with open(db_file, "w", encoding="utf-8") as f:
-        json.dump(orders, f, indent=2)
+    with current_app.app_context():
+        for o in orders:
+            db_order = Order.query.get(o["order_id"])
+            if not db_order:
+                db_order = Order(order_id=o["order_id"])
+                db.session.add(db_order)
+                
+            db_order.queue_no = o.get("queue_no")
+            db_order.session_id = o.get("session_id")
+            db_order.phone = o.get("phone")
+            db_order.filename = o.get("filename")
+            db_order.filepath = o.get("filepath")
+            db_order.pages = o.get("pages")
+            db_order.copies = o.get("copies")
+            db_order.ptype = o.get("ptype")
+            db_order.total = o.get("total")
+            db_order.status = o.get("status")
+            db_order.time = o.get("time")
+            db_order.created_time = o.get("created_time")
+            db_order.paid_time = o.get("paid_time")
+            db_order.printed_time = o.get("printed_time")
+            db_order.print_start_time = o.get("print_start_time")
+        db.session.commit()
 
 
 def find_order(orders: List[Dict[str, Any]], order_id: str) -> Optional[Dict[str, Any]]:

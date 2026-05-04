@@ -3,81 +3,77 @@ import json
 import hashlib
 from datetime import datetime
 from flask import current_app
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import current_app
 
-def _get_users_db_path():
-    return current_app.config.get("USERS_DB", "users.json")
+from app.extensions import db
+from app.models import User
 
 def load_users():
-    db_path = _get_users_db_path()
-    if not os.path.exists(db_path):
-        return []
-    try:
-        with open(db_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    return [u.to_dict() for u in User.query.all()]
 
 def save_users(users):
-    db_path = _get_users_db_path()
-    with open(db_path, "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=2)
+    pass # No longer needed, handled by SQLAlchemy db.session.commit()
 
 def hash_password(password):
+    return generate_password_hash(password)
+
+def _legacy_hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 def get_user(phone):
-    users = load_users()
-    for u in users:
-        if u.get("phone") == phone:
-            return u
+    user = User.query.get(phone)
+    if user:
+        return user.to_dict()
     return None
 
 def register_user(phone, name, password):
     phone = str(phone).strip()
-    users = load_users()
-    for u in users:
-        if str(u.get("phone")).strip() == phone:
-            return False, "Phone number already registered"
+    if User.query.get(phone):
+        return False, "Phone number already registered"
     
-    new_user = {
-        "phone": phone,
-        "name": name,
-        "password": hash_password(password),
-        "balance": 0.0,
-        "due": 0.0,
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    users.append(new_user)
-    save_users(users)
-    return True, new_user
+    user = User(
+        phone=phone,
+        name=name,
+        password=hash_password(password),
+        balance=0.0,
+        due=0.0,
+        created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    db.session.add(user)
+    db.session.commit()
+    return True, user.to_dict()
 
 def authenticate_user(phone, password):
     phone = str(phone).strip()
-    user = get_user(phone)
-    if not user:
+    user_db = User.query.get(phone)
+    if not user_db:
         return False, "User not found"
     
-    if user.get("password") == hash_password(password):
-        return True, user
+    if user_db.password.startswith("scrypt:") or user_db.password.startswith("pbkdf2:"):
+        if check_password_hash(user_db.password, password):
+            return True, user_db.to_dict()
+    elif user_db.password == _legacy_hash_password(password):
+        user_db.password = generate_password_hash(password)
+        db.session.commit()
+        return True, user_db.to_dict()
+        
     return False, "Incorrect password"
 
 def update_user_balance(phone, amount_to_add):
     phone = str(phone).strip()
-    users = load_users()
-    for u in users:
-        if str(u.get("phone")).strip() == phone:
-            current_balance = float(u.get("balance", 0.0))
-            u["balance"] = current_balance + float(amount_to_add)
-            save_users(users)
-            return True, u["balance"]
+    user = User.query.get(phone)
+    if user:
+        user.balance = float(user.balance or 0.0) + float(amount_to_add)
+        db.session.commit()
+        return True, user.balance
     return False, 0.0
 
 def update_user_password(phone, new_password):
     phone = str(phone).strip()
-    users = load_users()
-    for u in users:
-        if str(u.get("phone")).strip() == phone:
-            u["password"] = hash_password(new_password)
-            save_users(users)
-            return True, "Password updated successfully"
+    user = User.query.get(phone)
+    if user:
+        user.password = hash_password(new_password)
+        db.session.commit()
+        return True, "Password updated successfully"
     return False, "User not found"

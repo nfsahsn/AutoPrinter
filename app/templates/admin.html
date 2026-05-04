@@ -8,7 +8,10 @@
 {% endblock %}
 
 {% block extra_head %}
+{% if active_tab == 'orders' %}
 <meta http-equiv='refresh' content='{{ config["ADMIN_REFRESH_SECONDS"] }}'>
+{% endif %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -22,12 +25,91 @@
     </div>
 
     <div class="tabs mb-3">
+        <a href="/admin?tab=dashboard" class="tab {% if active_tab == 'dashboard' %}active{% endif %}">Dashboard</a>
         <a href="/admin?tab=orders" class="tab {% if active_tab == 'orders' %}active{% endif %}">Orders</a>
         <a href="/admin?tab=users" class="tab {% if active_tab == 'users' %}active{% endif %}">Users</a>
     </div>
 
     <div class="table-wrap">
-        {% if active_tab == 'users' %}
+        {% if active_tab == 'dashboard' %}
+        <div class="grid grid-2 mb-4">
+            <div class="cardx" style="text-align:center;">
+                <div class="text-muted" style="font-size:12px; font-weight:700; text-transform:uppercase;">Total Revenue</div>
+                <div style="font-size:28px; font-weight:800; color:var(--status-success);">৳{{ total_revenue }}</div>
+            </div>
+            <div class="cardx" style="text-align:center;">
+                <div class="text-muted" style="font-size:12px; font-weight:700; text-transform:uppercase;">Pages Printed</div>
+                <div style="font-size:28px; font-weight:800; color:var(--accent-blue);">{{ total_pages }}</div>
+            </div>
+            <div class="cardx" style="text-align:center; grid-column: span 2;">
+                <div class="text-muted" style="font-size:12px; font-weight:700; text-transform:uppercase;">Total Users</div>
+                <div style="font-size:28px; font-weight:800;">{{ total_users }}</div>
+            </div>
+        </div>
+        
+        <div class="cardx mb-4">
+            <h3 style="font-size:14px; color:var(--text-secondary); margin-bottom:16px;">Revenue (Last 7 Days)</h3>
+            <canvas id="revenueChart" height="200"></canvas>
+        </div>
+        <div class="cardx">
+            <h3 style="font-size:14px; color:var(--text-secondary); margin-bottom:16px;">Pages Printed (Last 7 Days)</h3>
+            <canvas id="pagesChart" height="200"></canvas>
+        </div>
+
+        <script>
+            const chartLabels = JSON.parse('{{ chart_labels | safe }}');
+            const chartRevenue = JSON.parse('{{ chart_revenue | safe }}');
+            const chartPages = JSON.parse('{{ chart_pages | safe }}');
+            
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.font.family = "'Inter', sans-serif";
+            
+            new Chart(document.getElementById('revenueChart'), {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: 'Revenue (৳)',
+                        data: chartRevenue,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            new Chart(document.getElementById('pagesChart'), {
+                type: 'bar',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: 'Pages',
+                        data: chartPages,
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+        </script>
+        {% elif active_tab == 'users' %}
         <table class="ap-table">
             <thead>
                 <tr>

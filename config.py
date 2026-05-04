@@ -53,7 +53,7 @@ class Config:
     WORKER_API_TOKEN = os.environ.get("WORKER_API_TOKEN", "")
     
     # 📂 PDF retention — auto-delete after N hours
-    PDF_RETENTION_HOURS = 24
+    PDF_RETENTION_HOURS = 1
     
     # 🐧 Linux Printing (Ubuntu)
     # Leave None to use the system default printer
@@ -71,3 +71,6 @@ class Config:
     USERS_DB = os.environ.get("USERS_DB", os.path.join(DATA_DIR, "users.json"))
     DEPOSITS_DB = os.environ.get("DEPOSITS_DB", os.path.join(DATA_DIR, "deposits.json"))
     REPORTS_FOLDER = os.environ.get("REPORTS_FOLDER", os.path.join(DATA_DIR, "reports"))
+    
+    SQLALCHEMY_DATABASE_URI = os.environ.get("SQLALCHEMY_DATABASE_URI", f"sqlite:///{os.path.join(DATA_DIR, 'autoprinter.db')}")
+    SQLALCHEMY_TRACK_MODIFICATIONS = False

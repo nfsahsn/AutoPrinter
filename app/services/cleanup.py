@@ -23,8 +23,8 @@ def _cleanup_loop(upload_folder, retention_hours):
         except Exception as e:
             print(f"[cleanup] Error: {e}")
 
-        # Check every 30 minutes
-        time.sleep(1800)
+        # Check every 10 minutes
+        time.sleep(600)
 
 
 def start_cleanup_thread(app):

@@ -7,6 +7,9 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    from app.extensions import db
+    db.init_app(app)
+
     # Ensure required folders exist
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["REPORTS_FOLDER"], exist_ok=True)
@@ -24,6 +27,10 @@ def create_app(config_class=Config):
     app.register_blueprint(worker_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(wallet_bp)
+
+    with app.app_context():
+        from app import models
+        db.create_all()
 
     # Start background PDF cleanup thread
     if app.config.get("ENABLE_CLEANUP_THREAD", True):

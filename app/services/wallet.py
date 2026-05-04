@@ -7,23 +7,15 @@ from datetime import datetime
 from flask import current_app
 from app.services.user import update_user_balance
 
-def _get_deposits_db_path():
-    return current_app.config.get("DEPOSITS_DB", "deposits.json")
+from app.extensions import db
+from app.models import Deposit
 
 def load_deposits():
-    db_path = _get_deposits_db_path()
-    if not os.path.exists(db_path):
-        return []
-    try:
-        with open(db_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    return [d.to_dict() for d in Deposit.query.all()]
 
 def save_deposits(deposits):
-    db_path = _get_deposits_db_path()
-    with open(db_path, "w", encoding="utf-8") as f:
-        json.dump(deposits, f, indent=2)
+    pass # No longer needed
+
 
 def create_deposit_session(phone, amount):
     amount = float(amount)
@@ -68,17 +60,17 @@ def create_deposit_session(phone, amount):
         if not payment_url:
             return False, "Payment link not received from gateway."
             
-        new_deposit = {
-            "deposit_id": deposit_id,
-            "phone": phone,
-            "amount": amount,
-            "status": "PENDING",
-            "payment_url": payment_url,
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "gateway_response": data
-        }
-        deposits.append(new_deposit)
-        save_deposits(deposits)
+        new_deposit = Deposit(
+            deposit_id=deposit_id,
+            phone=phone,
+            amount=amount,
+            status="PENDING",
+            payment_url=payment_url,
+            created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            gateway_response=json.dumps(data)
+        )
+        db.session.add(new_deposit)
+        db.session.commit()
         
         return True, payment_url
 
@@ -86,13 +78,12 @@ def create_deposit_session(phone, amount):
         return False, f"Gateway error: {str(e)}"
 
 def verify_and_credit_deposit(deposit_id, invoice_id=None):
-    deposits = load_deposits()
-    deposit = next((d for d in deposits if d.get("deposit_id") == deposit_id), None)
+    deposit = Deposit.query.get(deposit_id)
     
     if not deposit:
         return False, "Deposit not found."
         
-    if deposit.get("status") == "COMPLETED":
+    if deposit.status == "COMPLETED":
         return True, "Already completed."
 
     api_key = str(current_app.config.get("PAYMENTLY_API_KEY") or "").strip()
@@ -111,12 +102,12 @@ def verify_and_credit_deposit(deposit_id, invoice_id=None):
             success_statuses = {"completed", "complete", "success", "successful", "paid", "payment_success", "payment.completed", "captured"}
             
             if status_value in success_statuses:
-                deposit["status"] = "COMPLETED"
-                deposit["invoice_id"] = invoice_id
-                deposit["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                save_deposits(deposits)
+                deposit.status = "COMPLETED"
+                deposit.invoice_id = invoice_id
+                deposit.completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                db.session.commit()
                 
-                update_user_balance(deposit["phone"], deposit["amount"])
+                update_user_balance(deposit.phone, deposit.amount)
                 return True, "Wallet credited successfully."
         except Exception:
             pass
@@ -124,10 +115,8 @@ def verify_and_credit_deposit(deposit_id, invoice_id=None):
     return False, "Verification failed or payment not completed."
 
 def get_user_deposits(phone):
-    deposits = load_deposits()
-    user_deps = [d for d in deposits if d.get("phone") == phone]
-    user_deps.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-    return user_deps
+    deposits = Deposit.query.filter_by(phone=phone).order_by(Deposit.created_at.desc()).all()
+    return [d.to_dict() for d in deposits]
 
 def process_webhook(payload):
     metadata = payload.get("metadata", {})
