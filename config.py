@@ -21,6 +21,13 @@ class Config:
     
     # ✅ Your public host (NO trailing slash)
     PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://127.0.0.1:5000")
+
+    # 💳 Gateway (NagarikPay)
+    NAGORIKPAY_API_KEY = os.environ.get("NAGORIKPAY_API_KEY", "")
+    NAGORIKPAY_CREATE_URL = os.environ.get(
+        "NAGORIKPAY_CREATE_URL",
+        "https://secure-pay.nagorikpay.com/api/payment/create",
+    )
     
     # 💰 Pricing
     PRICE_PER_PAGE = 2

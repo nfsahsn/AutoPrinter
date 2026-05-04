@@ -11,18 +11,21 @@ app = Flask(__name__)
 
 # ---------------- SETTINGS ----------------
 
-app.secret_key = "CHANGE_THIS_SECRET_KEY_123"
+app.secret_key = os.environ.get("SECRET_KEY", "CHANGE_THIS_SECRET_KEY_123")
 
 # 🔐 Admin password (changeable from admin panel)
 ADMIN_PASSWORD_DEFAULT = "hackhobena"
 ADMIN_PASS_FILE = "admin_pass.json"
 
 # ✅ Your public host (NO trailing slash)
-PUBLIC_BASE_URL = "https://campanological-unwinning-clifford.ngrok-free.dev"
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://127.0.0.1:5000")
 
 # ✅ NagarikPay API
-NAGORIKPAY_API_KEY = "Y398rPST8FwhzzCpEJMcymljefa0jBwBmWzMqXKjCpKj9BeGAn"
-NAGORIKPAY_CREATE_URL = "https://secure-pay.nagorikpay.com/api/payment/create"
+NAGORIKPAY_API_KEY = os.environ.get("NAGORIKPAY_API_KEY", "")
+NAGORIKPAY_CREATE_URL = os.environ.get(
+    "NAGORIKPAY_CREATE_URL",
+    "https://secure-pay.nagorikpay.com/api/payment/create",
+)
 
 PRICE_PER_PAGE = 2
 

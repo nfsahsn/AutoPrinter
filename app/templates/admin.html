@@ -43,10 +43,12 @@
                         {% elif o.status == 'PRINTING' %}<span class="badge badge--printing">Printing</span>
                         {% elif o.status == 'PRINTED' %}<span class="badge badge--printed">Printed</span>
                         {% elif o.status == 'PAYMENT_PENDING' %}<span class="badge badge--pending">Pending</span>
+                        {% elif o.status == 'WAITING_PAYMENT' %}<span class="badge badge--pending">Pending</span>
+                        {% elif o.status == 'PAYMENT_LINK_CREATED' %}<span class="badge badge--pending">Pay Link</span>
                         {% else %}<span class="badge badge--failed">Failed</span>{% endif %}
                     </td>
                     <td>
-                        {% if o.status == 'PAYMENT_PENDING' %}
+                        {% if o.status in ['PAYMENT_PENDING', 'WAITING_PAYMENT', 'PAYMENT_LINK_CREATED'] %}
                         <form action="/admin-mark-paid/{{ o.order_id }}" method="post" style="display:inline;">
                             <button class="btn btn-success btn-sm" type="submit">Paid</button>
                         </form>

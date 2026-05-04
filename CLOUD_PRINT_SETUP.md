@@ -19,6 +19,8 @@ PUBLIC_BASE_URL=https://your-cloud-domain.example
 WORKER_API_TOKEN=change-this-to-a-long-random-token
 ENABLE_IN_PROCESS_PRINTER=0
 ENABLE_CLEANUP_THREAD=1
+NAGORIKPAY_API_KEY=your-gateway-api-key
+NAGORIKPAY_CREATE_URL=https://secure-pay.nagorikpay.com/api/payment/create
 ```
 
 Important: `ENABLE_IN_PROCESS_PRINTER=0` prevents the cloud machine from trying to print.
@@ -73,9 +75,10 @@ On Windows, run the equivalent command in PowerShell and make sure SumatraPDF is
 2. Keep the local PC on and connected to the printer.
 3. Run `local_print_worker.py` on the local PC.
 4. Users upload PDFs through the cloud website.
-5. In `/admin`, click `Paid` for a pending order to move it into the print queue.
-6. The local worker prints queued jobs.
+5. Customer pays through `/pay/<order_id>`.
+6. Success callback/webhook marks order as paid and admits it into `QUEUED` or `WAITING_QUEUE`.
+7. The local worker prints queued jobs.
 
-## Current Limitation
+## Notes
 
-Payment/gateway restoration is still separate. Until it is restored, use the admin `Paid` button to approve pending jobs.
+- The admin `Paid` button remains available as a manual fallback for demo or gateway outage scenarios.

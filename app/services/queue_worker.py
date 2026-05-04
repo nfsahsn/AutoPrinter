@@ -95,7 +95,13 @@ def mark_order_paid_for_queue(order_id: str) -> Optional[Dict[str, Any]]:
     if order is None:
         return None
 
-    if order.get("status") in ["PRINTING", "PRINTED"]:
+    status = str(order.get("status") or "")
+    if status in ["PRINTING", "PRINTED", "PRINT_FAILED"]:
+        return order
+
+    # Idempotency: if this order is already admitted into queue flow,
+    # repeated webhook/success callbacks should not re-balance it again.
+    if status in ["QUEUED", "WAITING_QUEUE"] and order.get("paid_time"):
         return order
 
     now = time.time()
@@ -103,7 +109,11 @@ def mark_order_paid_for_queue(order_id: str) -> Optional[Dict[str, Any]]:
         order["paid_time"] = _now_ts()
 
     capacity_pages = int(current_app.config.get("MAX_PAID_QUEUE_PAGES", 40))
-    used_pages = get_effective_used_pages(orders, now=now)
+    # Exclude current order from "used" calculation to avoid self double-counting.
+    used_pages = get_effective_used_pages(
+        [o for o in orders if o.get("order_id") != order_id],
+        now=now,
+    )
     job_pages = get_job_pages(order)
 
     order["status"] = "QUEUED" if used_pages + job_pages <= capacity_pages else "WAITING_QUEUE"

@@ -39,6 +39,9 @@
     </div>
 
     <div class="grid grid-1 mt-4">
+        {% if order.status in ['PAYMENT_PENDING', 'WAITING_PAYMENT', 'PAYMENT_LINK_CREATED'] %}
+        <a class="btn btn-primary w-full" href="/pay/{{ order.order_id }}">Pay Now</a>
+        {% endif %}
         <a class="btn btn-primary w-full" href="/status/{{ order.order_id }}">Track Status</a>
         <a class="btn btn-ghost w-full" href="/print" style="font-size:13px;">New Print</a>
     </div>

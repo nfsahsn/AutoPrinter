@@ -26,6 +26,10 @@
             <div class="d-flex flex-col items-end gap-2">
                 {% if o.status == 'PAYMENT_PENDING' %}
                     <span class="badge badge--pending">Payment Pending</span>
+                {% elif o.status == 'WAITING_PAYMENT' %}
+                    <span class="badge badge--pending">Payment Pending</span>
+                {% elif o.status == 'PAYMENT_LINK_CREATED' %}
+                    <span class="badge badge--pending">Payment Link Created</span>
                 {% elif o.status == 'WAITING_QUEUE' %}
                     <span class="badge badge--queued">Waiting Queue</span>
                 {% elif o.status == 'QUEUED' %}

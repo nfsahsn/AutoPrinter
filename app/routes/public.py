@@ -1,6 +1,7 @@
 import os
 import uuid
 import time
+import requests
 from datetime import datetime
 from flask import (
     Blueprint, request, redirect, url_for, jsonify,
@@ -14,15 +15,42 @@ from app.services.order import (
     get_effective_remaining_pages_for_queue,
     get_user_orders,
 )
+from app.services.queue_worker import mark_order_paid_for_queue
 from app.utils.helpers import get_pdf_pages, make_receipt_qr
 
 public_bp = Blueprint("public", __name__)
+_SUCCESS_PAYMENT_STATUSES = {
+    "completed",
+    "complete",
+    "success",
+    "successful",
+    "paid",
+    "payment_success",
+    "payment.completed",
+    "captured",
+}
 
 
 def init_session():
     if not session.get("session_id"):
         session["session_id"] = str(uuid.uuid4())
     return session["session_id"]
+
+
+def _safe_unlink(path):
+    try:
+        if path and os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
+
+
+def _payment_status_is_success(value):
+    return str(value or "").strip().lower() in _SUCCESS_PAYMENT_STATUSES
+
+
+def _status_page_url(order_id):
+    return url_for("public.status", order_id=order_id)
 
 
 # ── Auth routes ───────────────────────────────────────────────
@@ -51,21 +79,44 @@ def upload():
     if not file.filename.lower().endswith(".pdf"):
         return render_template("message.html", title="Error", body_html="Only PDF allowed!"), 400
 
-    copies = int(request.form.get("copies", 1))
+    try:
+        copies = int(request.form.get("copies", 1))
+    except (TypeError, ValueError):
+        copies = 1
+    if copies < 1:
+        return render_template("message.html", title="Error", body_html="Copies must be at least 1."), 400
+
     ptype = request.form.get("ptype", "bw")
+    now = time.time()
 
     orders = load_orders()
-    order_id = str(uuid.uuid4())[:8]
-    filename = f"{order_id}.pdf"
-    filepath = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
-    file.save(filepath)
+    tmp_filename = f".uploading_{uuid.uuid4().hex}.pdf"
+    tmp_filepath = os.path.join(current_app.config["UPLOAD_FOLDER"], tmp_filename)
+    file.save(tmp_filepath)
 
-    pages = get_pdf_pages(filepath)
+    pages = get_pdf_pages(tmp_filepath)
     total_pages = pages * copies
 
     if total_pages > 40:
-        os.remove(filepath)
+        _safe_unlink(tmp_filepath)
         return render_template("message.html", title="Error", body_html="Cannot print more than 40 pages at once."), 400
+
+    used_pages = get_paid_queue_pages(orders, now=now)
+    capacity_pages = int(current_app.config.get("MAX_PAID_QUEUE_PAGES", 40))
+    if used_pages + total_pages > capacity_pages:
+        _safe_unlink(tmp_filepath)
+        body_html = (
+            "Queue full. Try again in a few minutes.<br>"
+            "<span class='text-muted' style='font-size:12px;'>"
+            "Capacity frees automatically as printing progresses."
+            "</span>"
+        )
+        return render_template("message.html", title="Queue Full", body_html=body_html), 429
+
+    order_id = str(uuid.uuid4())[:8]
+    filename = f"{order_id}.pdf"
+    filepath = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
+    os.replace(tmp_filepath, filepath)
 
     total = total_pages * current_app.config["PRICE_PER_PAGE"]
     queue_no = get_next_queue_number(orders)
@@ -111,6 +162,185 @@ def token(order_id):
         paid_pages=paid_pages,
         estimated_total=estimated_total,
     )
+
+
+@public_bp.route("/pay/<order_id>")
+def pay(order_id):
+    orders = load_orders()
+    order = find_order(orders, order_id)
+    if not order:
+        return render_template("message.html", title="Error", body_html="Order not found!"), 404
+
+    if order.get("status") in {"WAITING_QUEUE", "QUEUED", "PRINTING", "PRINTED", "PRINT_FAILED"}:
+        return redirect(_status_page_url(order_id))
+
+    existing_payment_url = str(order.get("payment_url") or "").strip()
+    if order.get("status") == "PAYMENT_LINK_CREATED" and existing_payment_url:
+        return redirect(existing_payment_url)
+
+    api_key = str(current_app.config.get("NAGORIKPAY_API_KEY") or "").strip()
+    create_url = str(current_app.config.get("NAGORIKPAY_CREATE_URL") or "").strip()
+    if not api_key or not create_url:
+        body_html = (
+            "Payment gateway is not configured yet.<br>"
+            "<span class='text-muted' style='font-size:12px;'>"
+            "Please contact admin."
+            "</span>"
+        )
+        return render_template("message.html", title="Payment Unavailable", body_html=body_html), 503
+
+    public_base_url = str(current_app.config.get("PUBLIC_BASE_URL") or request.url_root).rstrip("/")
+    payload = {
+        "success_url": f"{public_base_url}/np-success/{order_id}",
+        "cancel_url": f"{public_base_url}/np-cancel/{order_id}",
+        "webhook_url": f"{public_base_url}/np-webhook",
+        "metadata": {
+            "order_id": order_id,
+            "queue_no": order.get("queue_no"),
+            "pages": order.get("pages"),
+            "copies": order.get("copies"),
+            "ptype": order.get("ptype"),
+            "total": order.get("total"),
+        },
+        "amount": str(order.get("total") or 0),
+    }
+    headers = {
+        "API-KEY": api_key,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response = requests.post(create_url, headers=headers, json=payload, timeout=20)
+        try:
+            data = response.json()
+        except Exception:
+            data = {
+                "status_code": response.status_code,
+                "body": (response.text or "")[:2000],
+            }
+    except Exception as exc:
+        return render_template(
+            "message.html",
+            title="Payment Error",
+            body_html=f"Payment create error: {exc}",
+        ), 500
+
+    payment_url = data.get("payment_url") or data.get("url") or data.get("redirect_url")
+    order["gateway_response"] = data
+    order["payment_created_time"] = int(time.time())
+
+    if not payment_url:
+        save_orders(orders)
+        return render_template(
+            "message.html",
+            title="Payment Error",
+            body_html="Payment link not received from gateway.",
+        ), 500
+
+    order["status"] = "PAYMENT_LINK_CREATED"
+    order["payment_url"] = payment_url
+    save_orders(orders)
+    return redirect(payment_url)
+
+
+@public_bp.route("/np-success/<order_id>")
+def np_success(order_id):
+    orders = load_orders()
+    order = find_order(orders, order_id)
+    if not order:
+        return render_template("message.html", title="Error", body_html="Order not found!"), 404
+
+    query_data = request.args.to_dict(flat=True)
+    order["np_success_query"] = query_data
+
+    trxid = (
+        request.args.get("transactionId")
+        or request.args.get("transaction_id")
+        or request.args.get("trxid")
+        or ""
+    )
+    if trxid:
+        order["trxid"] = trxid
+    save_orders(orders)
+
+    status_value = request.args.get("status")
+    if _payment_status_is_success(status_value):
+        mark_order_paid_for_queue(order_id)
+
+    return redirect(_status_page_url(order_id))
+
+
+@public_bp.route("/np-cancel/<order_id>")
+def np_cancel(order_id):
+    orders = load_orders()
+    order = find_order(orders, order_id)
+    if not order:
+        return render_template("message.html", title="Error", body_html="Order not found!"), 404
+
+    if order.get("status") in {"PAYMENT_LINK_CREATED", "WAITING_PAYMENT", "PAYMENT_PENDING"}:
+        order["status"] = "PAYMENT_PENDING"
+        save_orders(orders)
+
+    body_html = (
+        "You cancelled the payment or closed the gateway.<br>"
+        f"<a class='btn btn-primary w-full mt-3' href='/pay/{order_id}'>Try Payment Again</a>"
+    )
+    return render_template("message.html", title="Payment Cancelled", body_html=body_html)
+
+
+@public_bp.route("/np-webhook", methods=["POST"])
+def np_webhook():
+    payload_json = request.get_json(silent=True) or {}
+    payload_form = dict(request.form) if request.form else {}
+    payload = payload_json if payload_json else payload_form
+
+    metadata = payload.get("metadata", {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    order_id = (
+        metadata.get("order_id")
+        or payload.get("order_id")
+        or payload.get("reference")
+        or request.args.get("order_id")
+    )
+    if not order_id:
+        return jsonify({"ok": False, "error": "order_id missing"}), 400
+
+    orders = load_orders()
+    order = find_order(orders, str(order_id))
+    if not order:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+
+    order["np_webhook"] = payload
+    trxid = (
+        payload.get("transactionId")
+        or payload.get("transaction_id")
+        or payload.get("trxid")
+        or payload.get("payment_id")
+        or ""
+    )
+    if trxid:
+        order["trxid"] = str(trxid)
+    save_orders(orders)
+
+    status_value = (
+        payload.get("status")
+        or payload.get("payment_status")
+        or payload.get("event")
+    )
+    if not _payment_status_is_success(status_value):
+        return jsonify({"ok": True, "message": "ignored non-success webhook"}), 202
+
+    admitted = mark_order_paid_for_queue(str(order_id))
+    if not admitted:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+
+    return jsonify({
+        "ok": True,
+        "order_id": order_id,
+        "status": admitted.get("status"),
+    })
 
 
 @public_bp.route("/status/<order_id>")

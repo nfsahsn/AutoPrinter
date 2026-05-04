@@ -1,0 +1,129 @@
+AUTO PRINTER — QUEUE HANDLING ADJUSTMENT PLAN (Gateway-integrated, strict dynamic capacity gate)
+
+Goal
+1) Customer pays (real gateway or demo webhook) → printing starts automatically when the worker can claim the job.
+2) Queue capacity “clears dynamically” while printing (virtual clearing), so capacity is freed over time.
+3) Backend must prevent new jobs from entering the system when capacity is full, and auto-allow uploads later when capacity clears.
+
+Key queue concepts (already in your codebase)
+- States:
+  - WAITING_QUEUE: paid job waiting for capacity
+  - QUEUED: admitted to queue, waiting for worker claim
+  - PRINTING: currently printing
+  - PRINTED / PRINT_FAILED: terminal
+- paid_time is required for FIFO ordering and admission logic.
+- Virtual clearing capacity model:
+  - PRINTING job capacity contribution is based on “remaining pages”, computed from print_start_time and sec_per_page.
+  - This is implemented in app/services/order.py:
+    - get_effective_used_pages()
+    - get_effective_remaining_pages_for_queue()
+    - get_paid_queue_pages()
+
+Where the “paid → queue admission” happens
+- app/services/queue_worker.py::mark_order_paid_for_queue(order_id)
+  - Sets paid_time (if missing)
+  - Computes current used capacity
+  - Sets:
+    - status = "QUEUED" if there is capacity
+    - status = "WAITING_QUEUE" otherwise
+
+Where worker claims/prints
+- app/services/queue_worker.py::claim_next_job_for_printing()
+  - Only claims orders with status == "QUEUED"
+  - Picks FIFO by paid_time
+  - Sets status = "PRINTING" and sets print_start_time
+
+Plan changes (required)
+
+A) Dynamic capacity gate on upload (strict gate: block when full; auto-allow later)
+File: app/routes/public.py
+Location: inside /upload route, after you know pages and copies, before saving order to orders.json
+
+Add:
+1. Compute effective used capacity right now:
+   - used_pages = get_paid_queue_pages(orders, now=time.time())
+2. Compute pages for this new job:
+   - new_job_pages = pages * copies
+   NOTE: In your queue model, “pages” are already expanded by copies as job_pages = pages * copies. For capacity gating, use the same rule.
+3. If used_pages + new_job_pages > current_app.config["MAX_PAID_QUEUE_PAGES"]:
+   - Delete/remove the just-uploaded temporary file (if already saved)
+   - Return an error page/message like:
+     “Queue full. Try again in a few minutes. (Capacity frees as printing progresses.)”
+   - Do NOT create the order in orders.json yet (best) OR mark it as rejected (simple UX: reject before persisting)
+
+Alternative implementation order:
+- To avoid saving large files before rejecting:
+  - Save to temp path first, compute pages, gate capacity, then move to uploads + create order only if allowed.
+
+Result:
+- Customers cannot flood the queue while it is truly full.
+- As PRINTING progresses, virtual clearing reduces effective used pages, so upload becomes allowed automatically without manual cleanup.
+
+B) Gateway success handler should only “admit paid job” using existing queue logic
+Integration point:
+- Wherever your gateway integration handles “payment verified SUCCESS” (webhook or redirect callback),
+  call exactly one backend function:
+  - mark_order_paid_for_queue(order_id)
+
+Then:
+- Redirect user to /status/<order_id>
+- Let:
+  - admission thread move WAITING_QUEUE → QUEUED
+  - worker thread claim QUEUED → PRINTING
+
+Important:
+- Idempotency:
+  - mark_order_paid_for_queue already returns the order or sets status; still implement safe behavior:
+    - If order is already PRINTED/PRINTING, do not change unexpectedly.
+    - Best practice: in gateway success, call mark_order_paid_for_queue and ignore if already in paid/printing states.
+
+C) (Optional but recommended) Update token page to reflect real queue status after payment success
+Right now token.html shows a static “Payment Pending” block and QR to status.
+
+Recommended UX:
+- On token page, replace “Payment Pending” label with dynamic status (via /status-data polling like status.html does), OR
+- After payment success redirect to /status/<order_id> (already good UX)
+
+Minimum recommended:
+- Ensure gateway success redirects to /status/<order_id> so the customer immediately sees WAITING_QUEUE/QUEUED/PRINTING.
+
+D) Ensure status-data aligns with your queue states
+File: app/routes/public.py::status_data
+Your code currently computes remaining time for orders based on:
+- status in {WAITING_QUEUE, QUEUED, PRINTING} with paid_time
+- FIFO based on paid_time
+- remaining pages for PRINTING via virtual clearing
+
+After applying A+B, ensure:
+- All transitions follow:
+  PAYMENT_PENDING/NOT_PAID → (gateway success) → QUEUED or WAITING_QUEUE
+  WAITING_QUEUE → QUEUED (admission loop)
+  QUEUED → PRINTING (worker claim)
+  PRINTING → PRINTED/PRINT_FAILED (worker complete)
+
+Testing checklist (must-do)
+1) Upload small PDF when queue has room:
+   - order created
+   - gateway success triggers mark_order_paid_for_queue
+   - status transitions to QUEUED and then PRINTING
+2) Upload when queue is near full:
+   - /upload should reject (capacity gate)
+   - as time passes and printing progresses, /upload should become allowed again
+3) Multiple jobs FIFO correctness:
+   - pay multiple jobs in order
+   - ensure worker prints in paid_time FIFO
+4) Status countdown consistency:
+   - /status-data remaining time should shrink while printing
+5) Double success idempotency:
+   - call gateway success twice for the same order_id
+   - ensure it doesn’t cause duplicate prints or invalid status
+
+Implementation order (suggested)
+1) Add dynamic capacity gate to /upload (A).
+2) Wire gateway success to call mark_order_paid_for_queue (B).
+3) Redirect to /status/<order_id>.
+4) Optional: improve token.html UX.
+
+Notes / assumptions
+- This plan assumes copies count fully against capacity: job_pages = pages * copies.
+- This plan uses your existing virtual clearing model; no extra “time passed” simulation is needed beyond what get_paid_queue_pages() and remaining pages compute.

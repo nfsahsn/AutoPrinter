@@ -20,5 +20,9 @@ services:
         generateValue: true
       - key: WORKER_API_TOKEN
         generateValue: true
+      - key: NAGORIKPAY_API_KEY
+        sync: false
+      - key: NAGORIKPAY_CREATE_URL
+        value: https://secure-pay.nagorikpay.com/api/payment/create
       - key: PUBLIC_BASE_URL
         sync: false

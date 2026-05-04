@@ -172,10 +172,13 @@ def get_jobs_before(order_id: str) -> int:
     return count
 
 
-def get_user_orders(phone: str) -> List[Dict[str, Any]]:
-    """Get all orders for a specific user, newest first."""
+def get_user_orders(user_ref: str) -> List[Dict[str, Any]]:
+    """Get user orders by session_id (guest flow) or phone, newest first."""
     orders = load_orders()
-    return list(reversed([o for o in orders if o.get("phone") == phone]))
+    return list(reversed([
+        o for o in orders
+        if o.get("session_id") == user_ref or o.get("phone") == user_ref
+    ]))
 
 
 def get_effective_printing_pages_before_order(
