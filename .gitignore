@@ -1,0 +1,12 @@
+venv/
+venv_new/
+__pycache__/
+*.pyc
+.env
+autoprinter.db
+uploads/
+reports/
+*.json
+test_*.py
+.codex/
+.sixth/
