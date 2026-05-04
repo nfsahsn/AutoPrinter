@@ -20,9 +20,11 @@ services:
         generateValue: true
       - key: WORKER_API_TOKEN
         generateValue: true
-      - key: NAGORIKPAY_API_KEY
+      - key: PAYMENTLY_API_KEY
         sync: false
-      - key: NAGORIKPAY_CREATE_URL
-        value: https://secure-pay.nagorikpay.com/api/payment/create
+      - key: PAYMENTLY_CREATE_URL
+        value: https://nfsahsn.paymently.io/api/checkout-v2
+      - key: PAYMENTLY_VERIFY_URL
+        value: https://nfsahsn.paymently.io/api/verify-payment
       - key: PUBLIC_BASE_URL
         sync: false
