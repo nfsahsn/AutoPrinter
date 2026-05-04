@@ -21,9 +21,80 @@
         </div>
     </div>
 
-
+    <div class="tabs mb-3">
+        <a href="/admin?tab=orders" class="tab {% if active_tab == 'orders' %}active{% endif %}">Orders</a>
+        <a href="/admin?tab=users" class="tab {% if active_tab == 'users' %}active{% endif %}">Users</a>
+    </div>
 
     <div class="table-wrap">
+        {% if active_tab == 'users' %}
+        <table class="ap-table">
+            <thead>
+                <tr>
+                    <th>Phone</th><th>Name</th><th>Balance</th><th>Due</th><th>Joined</th><th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td style="font-weight: 800; font-family: 'JetBrains Mono';">{{ u.phone }}</td>
+                    <td>{{ u.name }}</td>
+                    <td style="color: var(--status-success); font-weight: 700;">৳{{ u.balance }}</td>
+                    <td style="color: var(--status-danger); font-weight: 700;">৳{{ u.due }}</td>
+                    <td style="font-size: 11px;">{{ u.created_at }}</td>
+                    <td>
+                        <button class="btn btn-outline btn-sm" onclick="openBalanceModal('{{ u.phone }}')">+/- Bal</button>
+                        <button class="btn btn-outline btn-sm" onclick="openPasswordModal('{{ u.phone }}')">Pass</button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan='6' class="text-center text-muted py-4">No users found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Modals -->
+        <div id="balanceModal" class="modal-overlay" style="display:none;">
+            <div class="modal-card">
+                <h3 class="mb-3">Update Balance</h3>
+                <form id="balanceForm" method="POST">
+                    <input type="number" step="0.01" name="amount" class="form-control mb-3" placeholder="Amount (use - to deduct)" required>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-dark flex-fill" onclick="closeModals()">Cancel</button>
+                        <button type="submit" class="btn btn-primary flex-fill">Update</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="passwordModal" class="modal-overlay" style="display:none;">
+            <div class="modal-card">
+                <h3 class="mb-3">Update Password</h3>
+                <form id="passwordForm" method="POST">
+                    <input type="password" name="password" class="form-control mb-3" placeholder="New Password (min 4 chars)" required minlength="4">
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-dark flex-fill" onclick="closeModals()">Cancel</button>
+                        <button type="submit" class="btn btn-primary flex-fill">Update</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            function openBalanceModal(phone) {
+                document.getElementById('balanceForm').action = '/admin/user/balance/' + phone;
+                document.getElementById('balanceModal').style.display = 'flex';
+            }
+            function openPasswordModal(phone) {
+                document.getElementById('passwordForm').action = '/admin/user/password/' + phone;
+                document.getElementById('passwordModal').style.display = 'flex';
+            }
+            function closeModals() {
+                document.getElementById('balanceModal').style.display = 'none';
+                document.getElementById('passwordModal').style.display = 'none';
+            }
+        </script>
+        {% else %}
         <table class="ap-table">
             <thead>
                 <tr>
@@ -61,6 +132,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

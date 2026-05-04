@@ -8,6 +8,7 @@ from flask import (
 from app.services.order import load_orders, save_orders, find_order
 from app.services.printer import print_pdf_windows, PRINTER_LOCK
 from app.services.queue_worker import mark_order_paid_for_queue
+from app.services.user import update_user_balance, update_user_password
 from app.utils.helpers import admin_required
 
 admin_bp = Blueprint("admin", __name__)
@@ -60,13 +61,25 @@ def admin_panel():
     if not admin_required():
         return redirect(url_for("admin.admin_login"))
 
-    orders = list(reversed(load_orders()))
-    return render_template(
-        "admin.html",
-        title="Admin Panel",
-        orders=orders,
-        active_tab="orders",
-    )
+    tab = request.args.get("tab", "orders")
+
+    if tab == "users":
+        from app.services.user import load_users
+        users = load_users()
+        return render_template(
+            "admin.html",
+            title="Admin Panel - Users",
+            users=users,
+            active_tab="users",
+        )
+    else:
+        orders = list(reversed(load_orders()))
+        return render_template(
+            "admin.html",
+            title="Admin Panel - Orders",
+            orders=orders,
+            active_tab="orders",
+        )
 
 
 
@@ -149,3 +162,29 @@ def admin_change_password():
             )
 
     return render_template("admin_change_password.html", title="Change Password", error=error)
+
+# ── Admin — User Management ───────────────────────────────────
+@admin_bp.route("/admin/user/balance/<phone>", methods=["POST"])
+def admin_user_balance(phone):
+    if not admin_required():
+        return redirect(url_for("admin.admin_login"))
+        
+    amount = request.form.get("amount")
+    try:
+        amount = float(amount)
+        update_user_balance(phone, amount)
+    except (TypeError, ValueError):
+        pass
+        
+    return redirect(url_for("admin.admin_panel", tab="users"))
+
+@admin_bp.route("/admin/user/password/<phone>", methods=["POST"])
+def admin_user_password(phone):
+    if not admin_required():
+        return redirect(url_for("admin.admin_login"))
+        
+    new_password = request.form.get("password")
+    if new_password and len(new_password) >= 4:
+        update_user_password(phone, new_password)
+        
+    return redirect(url_for("admin.admin_panel", tab="users"))

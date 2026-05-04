@@ -71,3 +71,13 @@ def update_user_balance(phone, amount_to_add):
             save_users(users)
             return True, u["balance"]
     return False, 0.0
+
+def update_user_password(phone, new_password):
+    phone = str(phone).strip()
+    users = load_users()
+    for u in users:
+        if str(u.get("phone")).strip() == phone:
+            u["password"] = hash_password(new_password)
+            save_users(users)
+            return True, "Password updated successfully"
+    return False, "User not found"
