@@ -165,6 +165,7 @@
     .d-flex{display:flex} .items-center{align-items:center} .justify-between{justify-content:space-between} .flex-wrap{flex-wrap:wrap}
 
     .alert-error { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); border-radius:var(--radius-md); padding:12px 16px; color:#fca5a5; font-size:14px; font-weight:600; margin-bottom:16px; animation:shake 0.4s ease; }
+    .alert-success { background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); border-radius:var(--radius-md); padding:12px 16px; color:#34d399; font-size:14px; font-weight:600; margin-bottom:16px; animation:fadeIn 0.4s ease; }
     .ap-footer { text-align:center; color:var(--text-muted); font-size:12px; font-weight:500; margin-top:32px; padding-bottom:12px; }
 
     /* Tabs */
@@ -190,9 +191,8 @@
 
     ::selection { background:rgba(59,130,246,0.3); color:#fff; }
     ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:4px}
-
-    {% block extra_css %}{% endblock %}
     </style>
+    {% block extra_css %}{% endblock %}
 </head>
 <body>
     <!-- Google Tag Manager (noscript) -->

@@ -31,7 +31,7 @@ def register():
     success, user_or_msg = register_user(phone, name, password)
     if success:
         session["user_phone"] = user_or_msg["phone"]
-        return redirect(url_for("public.wallet"))
+        return redirect(url_for("wallet.dashboard"))
     else:
         return render_template("message.html", title="Registration Failed", body_html=user_or_msg, headline="❌ Error"), 400
 
