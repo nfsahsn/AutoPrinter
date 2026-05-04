@@ -158,20 +158,20 @@ def admit_waiting_jobs_once(orders: Optional[List[Dict[str, Any]]] = None) -> Tu
 
 
 def _admission_loop(app: Any) -> None:
-    with app.app_context():
-        while True:
+    while True:
+        with app.app_context():
             try:
                 orders = load_orders()
                 admit_waiting_jobs_once(orders)
             except Exception as e:
                 # Keep loop alive; logging to stdout for now.
                 print(f"[queue-admission] Error: {e}")
-            time.sleep(_QUEUE_ADMISSION_INTERVAL_SEC)
+        time.sleep(_QUEUE_ADMISSION_INTERVAL_SEC)
 
 
 def _printer_worker_loop(app: Any) -> None:
-    with app.app_context():
-        while True:
+    while True:
+        with app.app_context():
             next_job = None
             try:
                 orders = load_orders()
@@ -212,7 +212,7 @@ def _printer_worker_loop(app: Any) -> None:
 
                 print(f"[printer-worker] Error: {e}")
 
-            time.sleep(0.5)
+        time.sleep(0.5)
 
 
 def start_queue_worker_threads(app: Any) -> None:
