@@ -178,8 +178,8 @@ def pay(order_id):
     if order.get("status") == "PAYMENT_LINK_CREATED" and existing_payment_url:
         return redirect(existing_payment_url)
 
-    api_key = str(current_app.config.get("NAGORIKPAY_API_KEY") or "").strip()
-    create_url = str(current_app.config.get("NAGORIKPAY_CREATE_URL") or "").strip()
+    api_key = str(current_app.config.get("PAYMENTLY_API_KEY") or "").strip()
+    create_url = str(current_app.config.get("PAYMENTLY_CREATE_URL") or "").strip()
     if not api_key or not create_url:
         body_html = (
             "Payment gateway is not configured yet.<br>"
@@ -191,9 +191,9 @@ def pay(order_id):
 
     public_base_url = str(current_app.config.get("PUBLIC_BASE_URL") or request.url_root).rstrip("/")
     payload = {
-        "success_url": f"{public_base_url}/np-success/{order_id}",
-        "cancel_url": f"{public_base_url}/np-cancel/{order_id}",
-        "webhook_url": f"{public_base_url}/np-webhook",
+        "full_name": order.get("phone", "Guest"),
+        "email": "guest@autoprinter.com",
+        "amount": str(order.get("total") or 0),
         "metadata": {
             "order_id": order_id,
             "queue_no": order.get("queue_no"),
@@ -202,10 +202,13 @@ def pay(order_id):
             "ptype": order.get("ptype"),
             "total": order.get("total"),
         },
-        "amount": str(order.get("total") or 0),
+        "redirect_url": f"{public_base_url}/paymently-success/{order_id}",
+        "cancel_url": f"{public_base_url}/paymently-cancel/{order_id}",
+        "webhook_url": f"{public_base_url}/paymently-webhook",
+        "return_type": "GET"
     }
     headers = {
-        "API-KEY": api_key,
+        "RT-UDDOKTAPAY-API-KEY": api_key,
         "Content-Type": "application/json",
     }
 
@@ -243,35 +246,43 @@ def pay(order_id):
     return redirect(payment_url)
 
 
-@public_bp.route("/np-success/<order_id>")
-def np_success(order_id):
+@public_bp.route("/paymently-success/<order_id>")
+def paymently_success(order_id):
     orders = load_orders()
     order = find_order(orders, order_id)
     if not order:
         return render_template("message.html", title="Error", body_html="Order not found!"), 404
 
     query_data = request.args.to_dict(flat=True)
-    order["np_success_query"] = query_data
+    order["paymently_success_query"] = query_data
 
-    trxid = (
-        request.args.get("transactionId")
-        or request.args.get("transaction_id")
-        or request.args.get("trxid")
-        or ""
-    )
-    if trxid:
-        order["trxid"] = trxid
+    invoice_id = request.args.get("invoice_id")
+    if invoice_id:
+        order["trxid"] = invoice_id
     save_orders(orders)
 
-    status_value = request.args.get("status")
-    if _payment_status_is_success(status_value):
-        mark_order_paid_for_queue(order_id)
+    if invoice_id:
+        api_key = str(current_app.config.get("PAYMENTLY_API_KEY") or "").strip()
+        verify_url = str(current_app.config.get("PAYMENTLY_VERIFY_URL") or "").strip()
+        if api_key and verify_url:
+            headers = {
+                "RT-UDDOKTAPAY-API-KEY": api_key,
+                "Content-Type": "application/json",
+            }
+            try:
+                resp = requests.post(verify_url, headers=headers, json={"invoice_id": invoice_id}, timeout=10)
+                verify_data = resp.json()
+                status_value = verify_data.get("status")
+                if _payment_status_is_success(status_value):
+                    mark_order_paid_for_queue(order_id)
+            except Exception:
+                pass
 
     return redirect(_status_page_url(order_id))
 
 
-@public_bp.route("/np-cancel/<order_id>")
-def np_cancel(order_id):
+@public_bp.route("/paymently-cancel/<order_id>")
+def paymently_cancel(order_id):
     orders = load_orders()
     order = find_order(orders, order_id)
     if not order:
@@ -288,8 +299,8 @@ def np_cancel(order_id):
     return render_template("message.html", title="Payment Cancelled", body_html=body_html)
 
 
-@public_bp.route("/np-webhook", methods=["POST"])
-def np_webhook():
+@public_bp.route("/paymently-webhook", methods=["POST"])
+def paymently_webhook():
     payload_json = request.get_json(silent=True) or {}
     payload_form = dict(request.form) if request.form else {}
     payload = payload_json if payload_json else payload_form
@@ -312,9 +323,10 @@ def np_webhook():
     if not order:
         return jsonify({"ok": False, "error": "order not found"}), 404
 
-    order["np_webhook"] = payload
+    order["paymently_webhook"] = payload
     trxid = (
-        payload.get("transactionId")
+        payload.get("invoice_id")
+        or payload.get("transactionId")
         or payload.get("transaction_id")
         or payload.get("trxid")
         or payload.get("payment_id")
