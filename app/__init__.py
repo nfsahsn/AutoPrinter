@@ -16,10 +16,14 @@ def create_app(config_class=Config):
     from app.routes.public import public_bp
     from app.routes.admin import admin_bp
     from app.routes.worker import worker_bp
+    from app.routes.auth import auth_bp
+    from app.routes.wallet import wallet_bp
 
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(worker_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(wallet_bp)
 
     # Start background PDF cleanup thread
     if app.config.get("ENABLE_CLEANUP_THREAD", True):

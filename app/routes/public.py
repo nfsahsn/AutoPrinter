@@ -1,11 +1,10 @@
 import os
 import uuid
 import time
-import requests
 from datetime import datetime
 from flask import (
     Blueprint, request, redirect, url_for, jsonify,
-    render_template, current_app, session,
+    render_template, current_app, session, flash
 )
 from app.services.order import (
     load_orders, save_orders, find_order,
@@ -16,26 +15,10 @@ from app.services.order import (
     get_user_orders,
 )
 from app.services.queue_worker import mark_order_paid_for_queue
-from app.utils.helpers import get_pdf_pages, make_receipt_qr
+from app.services.user import update_user_balance, get_user
+from app.utils.helpers import get_pdf_pages, make_receipt_qr, login_required, admin_required
 
 public_bp = Blueprint("public", __name__)
-_SUCCESS_PAYMENT_STATUSES = {
-    "completed",
-    "complete",
-    "success",
-    "successful",
-    "paid",
-    "payment_success",
-    "payment.completed",
-    "captured",
-}
-
-
-def init_session():
-    if not session.get("session_id"):
-        session["session_id"] = str(uuid.uuid4())
-    return session["session_id"]
-
 
 def _safe_unlink(path):
     try:
@@ -44,35 +27,28 @@ def _safe_unlink(path):
     except Exception:
         pass
 
-
-def _payment_status_is_success(value):
-    return str(value or "").strip().lower() in _SUCCESS_PAYMENT_STATUSES
-
-
 def _status_page_url(order_id):
     return url_for("public.status", order_id=order_id)
 
-
-# ── Auth routes ───────────────────────────────────────────────
 @public_bp.route("/")
 def index():
-    return redirect(url_for("public.print_page"))
+    if "user_phone" in session:
+        return redirect(url_for("public.print_page"))
+    return render_template("index.html", title="AutoPrinter • Welcome")
 
-
-# ── Print routes ──────────────────────────────────────────────
 @public_bp.route("/print")
+@login_required
 def print_page():
-    init_session()
+    user = get_user(session["user_phone"])
     return render_template(
         "print.html",
         title="AutoPrinter • Upload",
+        user=user
     )
 
-
 @public_bp.route("/upload", methods=["POST"])
+@login_required
 def upload():
-    session_id = init_session()
-
     file = request.files.get("file")
     if not file:
         return render_template("message.html", title="Error", body_html="No file uploaded!"), 400
@@ -118,14 +94,14 @@ def upload():
     filepath = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
     os.replace(tmp_filepath, filepath)
 
-    total = total_pages * current_app.config["PRICE_PER_PAGE"]
+    total = float(total_pages * current_app.config["PRICE_PER_PAGE"])
     queue_no = get_next_queue_number(orders)
 
     orders.append({
         "queue_no": queue_no,
         "order_id": order_id,
-        "session_id": session_id,
-        "phone": "Guest",
+        "session_id": session.get("session_id", ""),
+        "phone": session["user_phone"],
         "filename": filename,
         "filepath": os.path.abspath(filepath),
         "pages": pages,
@@ -143,16 +119,22 @@ def upload():
 
 
 @public_bp.route("/token/<order_id>")
+@login_required
 def token(order_id):
     orders = load_orders()
     order = find_order(orders, order_id)
     if not order:
         return render_template("message.html", title="Error", body_html="Order not found!"), 404
+    
+    if order.get("phone") != session["user_phone"] and not admin_required():
+        return render_template("message.html", title="Error", body_html="Access Denied!"), 403
 
     qr_img = make_receipt_qr(order_id)
     paid_pages, paid_seconds = get_paid_queue_info()
     my_seconds = job_seconds(order)
     estimated_total = int(paid_seconds + my_seconds)
+
+    user = get_user(session["user_phone"])
 
     return render_template(
         "token.html",
@@ -161,198 +143,47 @@ def token(order_id):
         qr_img=qr_img,
         paid_pages=paid_pages,
         estimated_total=estimated_total,
+        user=user
     )
 
 
-@public_bp.route("/pay/<order_id>")
+@public_bp.route("/pay/<order_id>", methods=["POST", "GET"])
+@login_required
 def pay(order_id):
     orders = load_orders()
     order = find_order(orders, order_id)
     if not order:
         return render_template("message.html", title="Error", body_html="Order not found!"), 404
+        
+    if order.get("phone") != session["user_phone"]:
+        return render_template("message.html", title="Error", body_html="Access Denied!"), 403
 
     if order.get("status") in {"WAITING_QUEUE", "QUEUED", "PRINTING", "PRINTED", "PRINT_FAILED"}:
         return redirect(_status_page_url(order_id))
 
-    existing_payment_url = str(order.get("payment_url") or "").strip()
-    if order.get("status") == "PAYMENT_LINK_CREATED" and existing_payment_url:
-        return redirect(existing_payment_url)
+    user = get_user(session["user_phone"])
+    total_cost = float(order.get("total", 0.0))
+    current_balance = float(user.get("balance", 0.0))
 
-    api_key = str(current_app.config.get("PAYMENTLY_API_KEY") or "").strip()
-    create_url = str(current_app.config.get("PAYMENTLY_CREATE_URL") or "").strip()
-    if not api_key or not create_url:
-        body_html = (
-            "Payment gateway is not configured yet.<br>"
-            "<span class='text-muted' style='font-size:12px;'>"
-            "Please contact admin."
-            "</span>"
-        )
-        return render_template("message.html", title="Payment Unavailable", body_html=body_html), 503
+    if request.method == "POST":
+        if current_balance >= total_cost:
+            success, new_bal = update_user_balance(session["user_phone"], -total_cost)
+            if success:
+                mark_order_paid_for_queue(order_id)
+                return redirect(_status_page_url(order_id))
+            else:
+                return render_template("message.html", title="Error", body_html="Failed to deduct balance.", headline="❌ Error"), 500
+        else:
+            return redirect(url_for("wallet.dashboard"))
 
-    public_base_url = str(current_app.config.get("PUBLIC_BASE_URL") or request.url_root).rstrip("/")
-    payload = {
-        "full_name": order.get("phone", "Guest"),
-        "email": "guest@autoprinter.com",
-        "amount": str(order.get("total") or 0),
-        "metadata": {
-            "order_id": order_id,
-            "queue_no": order.get("queue_no"),
-            "pages": order.get("pages"),
-            "copies": order.get("copies"),
-            "ptype": order.get("ptype"),
-            "total": order.get("total"),
-        },
-        "redirect_url": f"{public_base_url}/paymently-success/{order_id}",
-        "cancel_url": f"{public_base_url}/paymently-cancel/{order_id}",
-        "webhook_url": f"{public_base_url}/paymently-webhook",
-        "return_type": "GET"
-    }
-    headers = {
-        "RT-UDDOKTAPAY-API-KEY": api_key,
-        "Content-Type": "application/json",
-    }
-
-    try:
-        response = requests.post(create_url, headers=headers, json=payload, timeout=20)
-        try:
-            data = response.json()
-        except Exception:
-            data = {
-                "status_code": response.status_code,
-                "body": (response.text or "")[:2000],
-            }
-    except Exception as exc:
-        return render_template(
-            "message.html",
-            title="Payment Error",
-            body_html=f"Payment create error: {exc}",
-        ), 500
-
-    payment_url = data.get("payment_url") or data.get("url") or data.get("redirect_url")
-    order["gateway_response"] = data
-    order["payment_created_time"] = int(time.time())
-
-    if not payment_url:
-        save_orders(orders)
-        return render_template(
-            "message.html",
-            title="Payment Error",
-            body_html="Payment link not received from gateway.",
-        ), 500
-
-    order["status"] = "PAYMENT_LINK_CREATED"
-    order["payment_url"] = payment_url
-    save_orders(orders)
-    return redirect(payment_url)
-
-
-@public_bp.route("/paymently-success/<order_id>")
-def paymently_success(order_id):
-    orders = load_orders()
-    order = find_order(orders, order_id)
-    if not order:
-        return render_template("message.html", title="Error", body_html="Order not found!"), 404
-
-    query_data = request.args.to_dict(flat=True)
-    order["paymently_success_query"] = query_data
-
-    invoice_id = request.args.get("invoice_id")
-    if invoice_id:
-        order["trxid"] = invoice_id
-    save_orders(orders)
-
-    if invoice_id:
-        api_key = str(current_app.config.get("PAYMENTLY_API_KEY") or "").strip()
-        verify_url = str(current_app.config.get("PAYMENTLY_VERIFY_URL") or "").strip()
-        if api_key and verify_url:
-            headers = {
-                "RT-UDDOKTAPAY-API-KEY": api_key,
-                "Content-Type": "application/json",
-            }
-            try:
-                resp = requests.post(verify_url, headers=headers, json={"invoice_id": invoice_id}, timeout=10)
-                verify_data = resp.json()
-                status_value = verify_data.get("status")
-                if _payment_status_is_success(status_value):
-                    mark_order_paid_for_queue(order_id)
-            except Exception:
-                pass
-
-    return redirect(_status_page_url(order_id))
-
-
-@public_bp.route("/paymently-cancel/<order_id>")
-def paymently_cancel(order_id):
-    orders = load_orders()
-    order = find_order(orders, order_id)
-    if not order:
-        return render_template("message.html", title="Error", body_html="Order not found!"), 404
-
-    if order.get("status") in {"PAYMENT_LINK_CREATED", "WAITING_PAYMENT", "PAYMENT_PENDING"}:
-        order["status"] = "PAYMENT_PENDING"
-        save_orders(orders)
-
-    body_html = (
-        "You cancelled the payment or closed the gateway.<br>"
-        f"<a class='btn btn-primary w-full mt-3' href='/pay/{order_id}'>Try Payment Again</a>"
+    # GET request shows confirmation
+    return render_template(
+        "message.html",
+        title="Confirm Payment",
+        headline="Confirm Payment",
+        body_html=f"Order Total: {total_cost} TK<br>Wallet Balance: {current_balance} TK<br><br>" + 
+        (f"<form method='post'><button type='submit' class='btn btn-primary w-full'>Pay Now</button></form>" if current_balance >= total_cost else f"<div class='alert-error'>Insufficient balance! You need {total_cost - current_balance} TK more.</div><a href='/wallet' class='btn btn-primary w-full mt-2'>Top Up Wallet</a>")
     )
-    return render_template("message.html", title="Payment Cancelled", body_html=body_html)
-
-
-@public_bp.route("/paymently-webhook", methods=["POST"])
-def paymently_webhook():
-    payload_json = request.get_json(silent=True) or {}
-    payload_form = dict(request.form) if request.form else {}
-    payload = payload_json if payload_json else payload_form
-
-    metadata = payload.get("metadata", {})
-    if not isinstance(metadata, dict):
-        metadata = {}
-
-    order_id = (
-        metadata.get("order_id")
-        or payload.get("order_id")
-        or payload.get("reference")
-        or request.args.get("order_id")
-    )
-    if not order_id:
-        return jsonify({"ok": False, "error": "order_id missing"}), 400
-
-    orders = load_orders()
-    order = find_order(orders, str(order_id))
-    if not order:
-        return jsonify({"ok": False, "error": "order not found"}), 404
-
-    order["paymently_webhook"] = payload
-    trxid = (
-        payload.get("invoice_id")
-        or payload.get("transactionId")
-        or payload.get("transaction_id")
-        or payload.get("trxid")
-        or payload.get("payment_id")
-        or ""
-    )
-    if trxid:
-        order["trxid"] = str(trxid)
-    save_orders(orders)
-
-    status_value = (
-        payload.get("status")
-        or payload.get("payment_status")
-        or payload.get("event")
-    )
-    if not _payment_status_is_success(status_value):
-        return jsonify({"ok": True, "message": "ignored non-success webhook"}), 202
-
-    admitted = mark_order_paid_for_queue(str(order_id))
-    if not admitted:
-        return jsonify({"ok": False, "error": "order not found"}), 404
-
-    return jsonify({
-        "ok": True,
-        "order_id": order_id,
-        "status": admitted.get("status"),
-    })
 
 
 @public_bp.route("/status/<order_id>")
@@ -384,7 +215,6 @@ def status_data(order_id):
             "remaining": remaining,
             "progress": progress,
             "pages_before": int(pages_before),
-            # Backward-compatible alias used by the current status template.
             "jobs_before": int(pages_before),
             "paid_queue_pages": paid_pages,
             "my_pages": my_pages,
@@ -398,11 +228,9 @@ def status_data(order_id):
     if status == "PRINT_FAILED":
         return response()
 
-    # If not paid yet, we can't place them into paid-time FIFO queue math.
     if not paid_time:
         return response()
 
-    # FIFO queue = jobs paid_time sorted, that are already admitted for printing.
     active_statuses = {"WAITING_QUEUE", "QUEUED", "PRINTING"}
 
     def paid_fifo_key(o):
@@ -449,11 +277,12 @@ def status_data(order_id):
     )
 
 
-# ── History routes ────────────────────────────────────────────
 @public_bp.route("/history")
+@login_required
 def history():
-    session_id = init_session()
-    my_orders = get_user_orders(session_id)
+    orders = load_orders()
+    my_orders = [o for o in orders if o.get("phone") == session["user_phone"]]
+    my_orders.sort(key=lambda x: x.get("created_time", 0), reverse=True)
 
     return render_template(
         "history.html",
@@ -461,8 +290,6 @@ def history():
         orders=my_orders[:20],
     )
 
-
-# ── Public QR ─────────────────────────────────────────────────
 @public_bp.route("/public-qr")
 def public_qr():
     qr_filename = "public_qr.png"

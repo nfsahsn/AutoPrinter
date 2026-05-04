@@ -209,9 +209,18 @@
             <p class="ap-header__tagline">Upload · Print · Collect — PDF Only</p>
         </header>
 
-        <div class="user-nav" style="justify-content: center; background: transparent; border: none; box-shadow: none;">
+        {% if session.get('user_phone') %}
+        <div class="user-nav">
+            <div class="user-nav__info">
+                <span class="user-nav__phone">{{ session.get('user_phone') }}</span>
+                {% if user %}
+                <span class="user-nav__balance" style="margin-left: 8px;">• {{ user.balance }} TK</span>
+                {% endif %}
+            </div>
             <div class="user-nav__links">
-                <a href="/history" class="nav-wallet" style="padding: 10px 20px; font-size: 14px; border-radius: var(--radius-lg);">View My Print History</a>
+                <a href="/wallet" class="nav-wallet">Wallet</a>
+                <a href="/history" class="btn-dark" style="padding:6px 10px; font-size: 12px; border-radius: var(--radius-sm); display: inline-flex; align-items: center;">History</a>
+                <a href="/logout" class="nav-logout">Logout</a>
             </div>
         </div>
         {% endif %}
