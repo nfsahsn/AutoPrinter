@@ -1,10 +1,12 @@
 {% extends 'base.html' %}
 {% block extra_css %}
+<style>
 .table-wrap { overflow-x: auto; margin: 0 -20px; padding: 0 20px; }
 .ap-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 600px; }
 .ap-table th { text-align: left; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 12px 10px; border-bottom: 1px solid var(--border); }
 .ap-table td { padding: 12px 10px; border-bottom: 1px solid var(--border); color: var(--text-secondary); vertical-align: middle; }
 .ap-table tr:hover td { background: rgba(255,255,255,0.02); }
+</style>
 {% endblock %}
 
 {% block extra_head %}

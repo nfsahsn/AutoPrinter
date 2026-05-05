@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block extra_css %}
+<style>
 .upload-hero { margin-bottom: 8px; }
 .upload-hero__title { font-size: 20px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 4px; }
 .upload-hero__sub { font-size: 13px; color: var(--text-muted); font-weight: 500; }
@@ -14,6 +15,7 @@
 .dropzone__filename.show { display: block; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+</style>
 {% endblock %}
 
 {% block content %}

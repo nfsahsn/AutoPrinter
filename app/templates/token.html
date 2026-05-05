@@ -1,8 +1,10 @@
 {% extends 'base.html' %}
 {% block extra_css %}
+<style>
 .token-number { font-family: 'JetBrains Mono', monospace; font-size: 72px; font-weight: 900; letter-spacing: -2px; background: var(--accent-gradient-h); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; line-height: 1; animation: scaleIn 0.5s both; }
 .qr-container { display: inline-block; padding: 12px; background: #fff; border-radius: var(--radius-lg); box-shadow: 0 8px 32px rgba(0,0,0,0.3); animation: fadeUp 0.5s 0.2s both; }
 .qr-container img { display: block; width: 180px; height: 180px; border-radius: var(--radius-sm); }
+</style>
 {% endblock %}
 
 {% block content %}
