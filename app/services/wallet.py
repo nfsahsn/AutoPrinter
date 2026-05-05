@@ -22,11 +22,10 @@ def create_deposit_session(phone, amount):
     if amount < 20.0:
         return False, "Minimum deposit is 20 taka."
         
-    deposits = load_deposits()
     deposit_id = str(uuid.uuid4())[:12]
     
-    api_key = str(current_app.config.get("PAYMENTLY_API_KEY") or "").strip()
-    create_url = str(current_app.config.get("PAYMENTLY_CREATE_URL") or "").strip()
+    api_key = str(current_app.config.get("XPAY_API_KEY") or "").strip()
+    create_url = str(current_app.config.get("XPAY_CREATE_URL") or "").strip()
     
     if not api_key or not create_url:
         return False, "Payment gateway is not configured."
@@ -34,31 +33,35 @@ def create_deposit_session(phone, amount):
     public_base_url = str(current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
     payload = {
         "full_name": phone,
-        "email": "user@autoprinter.com",
+        "email_address": "user@autoprinter.com",
+        "mobile_number": phone,
         "amount": str(amount),
+        "currency": "BDT",
         "metadata": {
             "deposit_id": deposit_id,
             "phone": phone,
             "type": "wallet_deposit"
         },
-        "redirect_url": f"{public_base_url}/wallet/success/{deposit_id}",
+        "return_url": f"{public_base_url}/wallet/success/{deposit_id}",
         "cancel_url": f"{public_base_url}/wallet/cancel/{deposit_id}",
-        "webhook_url": f"{public_base_url}/wallet/webhook",
-        "return_type": "GET"
+        "webhook_url": f"{public_base_url}/wallet/webhook"
     }
     
     headers = {
-        "RT-UDDOKTAPAY-API-KEY": api_key,
+        "MHS-PIPRAPAY-API-KEY": api_key,
         "Content-Type": "application/json",
     }
 
     try:
         response = requests.post(create_url, headers=headers, json=payload, timeout=20)
         data = response.json()
-        payment_url = data.get("payment_url") or data.get("url") or data.get("redirect_url")
+        
+        # In PipraPay v3, response is {"pp_id": "...", "pp_url": "..."}
+        payment_url = data.get("pp_url") or data.get("payment_url") or data.get("url")
         
         if not payment_url:
-            return False, "Payment link not received from gateway."
+            error_msg = data.get("error", {}).get("message", "Payment link not received.")
+            return False, f"Gateway error: {error_msg}"
             
         new_deposit = Deposit(
             deposit_id=deposit_id,
@@ -77,7 +80,7 @@ def create_deposit_session(phone, amount):
     except Exception as e:
         return False, f"Gateway error: {str(e)}"
 
-def verify_and_credit_deposit(deposit_id, invoice_id=None):
+def verify_and_credit_deposit(deposit_id, pp_id=None):
     deposit = Deposit.query.get(deposit_id)
     
     if not deposit:
@@ -86,24 +89,27 @@ def verify_and_credit_deposit(deposit_id, invoice_id=None):
     if deposit.status == "COMPLETED":
         return True, "Already completed."
 
-    api_key = str(current_app.config.get("PAYMENTLY_API_KEY") or "").strip()
-    verify_url = str(current_app.config.get("PAYMENTLY_VERIFY_URL") or "").strip()
+    api_key = str(current_app.config.get("XPAY_API_KEY") or "").strip()
+    verify_url = str(current_app.config.get("XPAY_VERIFY_URL") or "").strip()
     
-    if invoice_id and api_key and verify_url:
+    if pp_id and api_key and verify_url:
         headers = {
-            "RT-UDDOKTAPAY-API-KEY": api_key,
+            "MHS-PIPRAPAY-API-KEY": api_key,
             "Content-Type": "application/json",
         }
         try:
-            resp = requests.post(verify_url, headers=headers, json={"invoice_id": invoice_id}, timeout=10)
+            resp = requests.post(verify_url, headers=headers, json={"pp_id": pp_id}, timeout=10)
             verify_data = resp.json()
+            
+            # PipraPay v3 verify response usually contains 'status'
+            # If status is missing, we check if response contains success data
             status_value = str(verify_data.get("status", "")).strip().lower()
             
             success_statuses = {"completed", "complete", "success", "successful", "paid", "payment_success", "payment.completed", "captured"}
             
-            if status_value in success_statuses:
+            if status_value in success_statuses or verify_data.get("pp_id"):
                 deposit.status = "COMPLETED"
-                deposit.invoice_id = invoice_id
+                deposit.invoice_id = pp_id
                 deposit.completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 db.session.commit()
                 
@@ -133,7 +139,7 @@ def process_webhook(payload):
     if status_value not in success_statuses:
         return True, "ignored non-success webhook"
         
-    invoice_id = payload.get("invoice_id") or payload.get("transactionId") or payload.get("trxid")
+    pp_id = payload.get("pp_id") or payload.get("invoice_id")
     
-    success, msg = verify_and_credit_deposit(deposit_id, invoice_id=invoice_id)
+    success, msg = verify_and_credit_deposit(deposit_id, pp_id=pp_id)
     return success, msg

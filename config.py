@@ -22,16 +22,11 @@ class Config:
     # ✅ Your public host (NO trailing slash)
     PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://127.0.0.1:5000")
 
-    # 💳 Gateway (Paymently)
-    PAYMENTLY_API_KEY = os.environ.get("PAYMENTLY_API_KEY", "gN8DEwrJ4i6jl5t3wqhWa7BVK3LzRgA9vmpko7vI")
-    PAYMENTLY_CREATE_URL = os.environ.get(
-        "PAYMENTLY_CREATE_URL",
-        "https://nfsahsn.paymently.io/api/checkout-v2",
-    )
-    PAYMENTLY_VERIFY_URL = os.environ.get(
-        "PAYMENTLY_VERIFY_URL",
-        "https://nfsahsn.paymently.io/api/verify-payment",
-    )
+    # 💳 Gateway (XPay — self-hosted PipraPay)
+    XPAY_API_KEY = os.environ.get("XPAY_API_KEY", "ef5c19f24bf6bb500383ecb20a1ce50df665c2761937003cba")
+    XPAY_BASE_URL = os.environ.get("XPAY_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
+    XPAY_CREATE_URL = XPAY_BASE_URL + "/api/checkout/redirect"
+    XPAY_VERIFY_URL = XPAY_BASE_URL + "/api/verify-payment"
     
     # 💰 Pricing
     PRICE_PER_PAGE = 2

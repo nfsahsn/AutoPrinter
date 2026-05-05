@@ -42,6 +42,12 @@ def cancel(deposit_id):
 
 @wallet_bp.route("/wallet/webhook", methods=["POST"])
 def webhook():
+    # Validate XPay API key header for security
+    incoming_key = request.headers.get("MHS-PIPRAPAY-API-KEY", "")
+    expected_key = current_app.config.get("XPAY_API_KEY", "")
+    if incoming_key and expected_key and incoming_key != expected_key:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+    
     payload_json = request.get_json(silent=True) or {}
     payload_form = dict(request.form) if request.form else {}
     payload = payload_json if payload_json else payload_form

@@ -4,8 +4,11 @@ from app.services.user import authenticate_user, register_user
 
 auth_bp = Blueprint("auth", __name__)
 
-@auth_bp.route("/login", methods=["POST"])
+@auth_bp.route("/login", methods=["GET", "POST"])
 def login():
+    if request.method == "GET":
+        return redirect("/xpay/login")
+        
     phone = request.form.get("phone")
     password = request.form.get("password")
     
